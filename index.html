@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>因式分解接炸彈遊戲 - 霓虹重製版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --neon-cyan: #0ff;
+            --neon-pink: #f0f;
+            --neon-yellow: #ff0;
+            --dark-bg: #050510;
+        }
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: var(--dark-bg);
+            touch-action: none; 
+            color: white;
+        }
+        .cyber-font {
+            font-family: 'Orbitron', 'Noto Sans TC', sans-serif;
+        }
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: radial-gradient(circle at center, #1a1a3a 0%, #050510 100%);
+        }
+        canvas {
+            display: block;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.2);
+            border-left: 2px solid rgba(0, 255, 255, 0.3);
+            border-right: 2px solid rgba(0, 255, 255, 0.3);
+            background-color: transparent; /* Draws custom grid in JS */
+        }
+        /* UI Overlays */
+        .overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(5, 5, 16, 0.85);
+            backdrop-filter: blur(5px);
+            z-index: 10;
+        }
+        .hidden { display: none !important; }
+        
+        .neon-btn {
+            margin-top: 30px;
+            padding: 15px 50px;
+            font-size: 1.5rem;
+            font-weight: 900;
+            color: var(--neon-cyan);
+            background: transparent;
+            border: 2px solid var(--neon-cyan);
+            border-radius: 5px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            box-shadow: 0 0 10px var(--neon-cyan), inset 0 0 10px rgba(0,255,255,0.2);
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .neon-btn:hover {
+            background: var(--neon-cyan);
+            color: var(--dark-bg);
+            box-shadow: 0 0 30px var(--neon-cyan), 0 0 50px var(--neon-cyan);
+        }
+        .neon-btn:active { transform: scale(0.95); }
+        
+        .neon-text-title {
+            font-family: 'Orbitron', 'Noto Sans TC', sans-serif;
+            text-shadow: 0 0 10px var(--neon-pink), 0 0 20px var(--neon-pink);
+            color: #fff;
+        }
+        
+        /* 關卡升級提示 */
+        #levelUpMsg {
+            position: absolute;
+            top: 30%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3rem;
+            font-weight: 900;
+            color: var(--neon-yellow);
+            text-shadow: 0 0 20px var(--neon-yellow);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s, transform 0.5s;
+            z-index: 20;
+            text-align: center;
+        }
+        .level-up-anim {
+            animation: levelUpFade 2s forwards;
+        }
+        @keyframes levelUpFade {
+            0% { opacity: 0; transform: translate(-50%, -30%) scale(0.5); }
+            20% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+            80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, -70%) scale(1); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="levelUpMsg" class="cyber-font">LEVEL UP!</div>
+        
+        <!-- Start Screen -->
+        <div id="startScreen" class="overlay">
+            <h1 class="text-5xl md:text-7xl font-black mb-4 neon-text-title text-center tracking-wider">
+                FACTOR<br><span class="text-3xl md:text-4xl text-cyan-400" style="text-shadow: 0 0 10px #0ff;">因式分解 拆彈特工</span>
+            </h1>
+            <div class="bg-gray-900/50 border border-cyan-500/30 p-6 rounded-lg max-w-md backdrop-blur-md mb-8 shadow-[0_0_15px_rgba(0,255,255,0.1)]">
+                <p class="text-base md:text-lg text-gray-300 text-left mb-4 leading-relaxed">
+                    <span class="text-cyan-400 font-bold">任務目標：</span>接住與頂部題目相符的正確答案炸彈。<br>
+                    <span class="text-pink-400 font-bold">難度升級：</span>隨分數提升，解鎖乘法公式與十字交乘關卡。<br>
+                    <span class="text-yellow-400 font-bold">特殊道具：</span>注意掉落的「減速沙漏⏱️」與「愛心補血💖」。
+                </p>
+                <div class="flex flex-col gap-2 text-sm text-gray-400 mt-4 border-t border-gray-700 pt-4">
+                    <span>🕹️ 鍵盤：左右方向鍵 / A、D鍵</span>
+                    <span>📱 觸控：左右滑動拖曳光梭</span>
+                </div>
+            </div>
+            <button class="neon-btn" onclick="startGame()">SYSTEM START</button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="gameOverScreen" class="overlay hidden">
+            <h1 class="text-6xl md:text-7xl font-black mb-2 cyber-font text-red-500" style="text-shadow: 0 0 20px red;">SYSTEM FAILURE</h1>
+            <p class="text-2xl mb-6 mt-4">最終得分: <span id="finalScore" class="text-cyan-400 font-bold cyber-font text-4xl" style="text-shadow: 0 0 10px #0ff;">0</span></p>
+            <p id="levelReached" class="text-lg text-gray-400 mb-8">到達關卡: 1</p>
+            <button class="neon-btn" onclick="startGame()">REBOOT</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const finalScoreSpan = document.getElementById('finalScore');
+        const levelReachedSpan = document.getElementById('levelReached');
+        const levelUpMsg = document.getElementById('levelUpMsg');
+
+        // Game State
+        let gameMode = 'start'; 
+        let score = 0;
+        let lives = 3;
+        let level = 1;
+        let animationId;
+        
+        // Physics & Sizing
+        let gameWidth, gameHeight;
+        let baseBombSpeed = 2.5;
+        let currentSpeedMutiplier = 1;
+
+        // Player (Hoverboard)
+        const player = {
+            x: 0, y: 0, width: 120, height: 25, speed: 10,
+            movingLeft: false, movingRight: false, targetX: null 
+        };
+
+        // Entities
+        let bombs = [];
+        let items = []; // For power-ups
+        let particles = [];
+        let currentTargetQuestion = null;
+        let backgroundOffset = 0;
+
+        // Power-ups state
+        let activeEffects = {
+            slowTimeLeft: 0 // frames
+        };
+
+        // 題庫，加入 type 分類關卡 (1: 提公因式, 2: 乘法公式, 3: 十字交乘)
+        const questionBank = [
+            // Level 1: 提公因式
+            { q: "2x² + 4x", a: "2x(x+2)", wrong: ["2(x²+2)", "4x(x+1)"], type: 1 },
+            { q: "3x² - 9x", a: "3x(x-3)", wrong: ["3(x²-3)", "x(3x-9)"], type: 1 },
+            { q: "5x² + 10x", a: "5x(x+2)", wrong: ["5(x²+2)", "10x(x+1)"], type: 1 },
+            { q: "x² + 3x", a: "x(x+3)", wrong: ["x²(x+3)", "3(x²+x)"], type: 1 },
+            // Level 2: 乘法公式
+            { q: "x² - 1", a: "(x-1)(x+1)", wrong: ["(x-1)²", "(x+1)²"], type: 2 },
+            { q: "x² - 4", a: "(x-2)(x+2)", wrong: ["(x-4)(x+1)", "(x-2)²"], type: 2 },
+            { q: "x² - 9", a: "(x-3)(x+3)", wrong: ["(x-9)(x+1)", "(x-3)²"], type: 2 },
+            { q: "x² + 2x + 1", a: "(x+1)²", wrong: ["(x-1)²", "(x+1)(x-1)"], type: 2 },
+            { q: "x² - 4x + 4", a: "(x-2)²", wrong: ["(x+2)²", "(x+4)(x-1)"], type: 2 },
+            { q: "4x² - 25", a: "(2x-5)(2x+5)", wrong: ["(4x-5)(x+5)", "(2x-25)(2x+1)"], type: 2 },
+            // Level 3: 十字交乘法
+            { q: "x² + 5x + 6", a: "(x+2)(x+3)", wrong: ["(x+1)(x+6)", "(x-2)(x-3)"], type: 3 },
+            { q: "x² + 7x + 12", a: "(x+3)(x+4)", wrong: ["(x+2)(x+6)", "(x-3)(x-4)"], type: 3 },
+            { q: "x² - 5x + 6", a: "(x-2)(x-3)", wrong: ["(x+2)(x+3)", "(x-1)(x-6)"], type: 3 },
+            { q: "x² + x - 6", a: "(x+3)(x-2)", wrong: ["(x-3)(x+2)", "(x+6)(x-1)"], type: 3 },
+            { q: "x² - x - 6", a: "(x-3)(x+2)", wrong: ["(x+3)(x-2)", "(x-6)(x+1)"], type: 3 },
+            { q: "x² - 2x - 8", a: "(x-4)(x+2)", wrong: ["(x+4)(x-2)", "(x-8)(x+1)"], type: 3 },
+            { q: "2x² + 5x + 3", a: "(2x+3)(x+1)", wrong: ["(2x+1)(x+3)", "(2x-3)(x-1)"], type: 3 }
+        ];
+
+        function resizeCanvas() {
+            let isMobile = window.innerWidth < 768;
+            if (isMobile) {
+                gameWidth = window.innerWidth;
+                gameHeight = window.innerHeight;
+            } else {
+                gameHeight = window.innerHeight;
+                gameWidth = Math.min(window.innerHeight * 0.75, window.innerWidth);
+            }
+            canvas.width = gameWidth;
+            canvas.height = gameHeight;
+            
+            player.width = Math.max(100, gameWidth * 0.22);
+            if(player.x === 0) player.x = gameWidth / 2 - player.width / 2;
+            player.y = gameHeight - player.height - 40; 
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        window.addEventListener('keydown', (e) => {
+            if (gameMode !== 'playing') return;
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') player.movingLeft = true;
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') player.movingRight = true;
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') player.movingLeft = false;
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') player.movingRight = false;
+        });
+
+        canvas.addEventListener('touchstart', handleTouch, {passive: false});
+        canvas.addEventListener('touchmove', handleTouch, {passive: false});
+        canvas.addEventListener('touchend', () => { player.targetX = null; });
+
+        function handleTouch(e) {
+            if (gameMode !== 'playing') return;
+            e.preventDefault(); 
+            const rect = canvas.getBoundingClientRect();
+            const touch = e.touches[0];
+            const scaleX = canvas.width / rect.width;
+            let touchX = (touch.clientX - rect.left) * scaleX;
+            player.targetX = touchX - player.width / 2;
+        }
+
+        function checkLevelUp() {
+            let newLevel = 1;
+            if (score >= 160) newLevel = 3;
+            else if (score >= 60) newLevel = 2;
+
+            if (newLevel > level) {
+                level = newLevel;
+                // Trigger visual effect
+                levelUpMsg.innerHTML = `LEVEL ${level}<br><span style="font-size: 1.5rem; color:#fff;">解鎖新題型！</span>`;
+                levelUpMsg.classList.remove('level-up-anim');
+                void levelUpMsg.offsetWidth; // trigger reflow
+                levelUpMsg.classList.add('level-up-anim');
+                createExplosion(gameWidth/2, gameHeight/2, '#0ff', 50);
+            }
+        }
+
+        function spawnRound() {
+            bombs = [];
+            checkLevelUp();
+            
+            // Filter questions by current level
+            let availableQuestions = questionBank.filter(q => q.type <= level);
+            const qObj = availableQuestions[Math.floor(Math.random() * availableQuestions.length)];
+            currentTargetQuestion = qObj.q;
+
+            let answers = [
+                { text: qObj.a, isCorrect: true },
+                { text: qObj.wrong[0], isCorrect: false },
+                { text: qObj.wrong[1], isCorrect: false }
+            ];
+            answers.sort(() => Math.random() - 0.5);
+
+            const bombRadius = Math.min(gameWidth * 0.12, 45);
+            const laneWidth = gameWidth / 3;
+            
+            for (let i = 0; i < 3; i++) {
+                bombs.push({
+                    x: laneWidth * i + laneWidth / 2,
+                    y: -bombRadius - (Math.random() * 80), 
+                    radius: bombRadius,
+                    text: answers[i].text,
+                    isCorrect: answers[i].isCorrect,
+                    active: true,
+                    pulsePhase: Math.random() * Math.PI * 2
+                });
+            }
+
+            // Probability to spawn an item (25% chance per round)
+            if (Math.random() < 0.25) {
+                spawnItem();
+            }
+
+            // Base speed increases slowly with score, plus level jumps
+            currentSpeedMutiplier = 1 + (score / 200) + (level - 1) * 0.3;
+        }
+
+        function spawnItem() {
+            const types = ['slow', 'heart'];
+            const type = types[Math.floor(Math.random() * types.length)];
+            const size = 25;
+            items.push({
+                x: Math.random() * (gameWidth - size*2) + size,
+                y: -50,
+                radius: size,
+                type: type,
+                active: true,
+                speed: baseBombSpeed * 1.2
+            });
+        }
+
+        function createExplosion(x, y, color, count = 20) {
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x: x, y: y,
+                    vx: (Math.random() - 0.5) * 12,
+                    vy: (Math.random() - 0.5) * 12,
+                    life: 1.0,
+                    color: color,
+                    size: Math.random() * 4 + 2
+                });
+            }
+        }
+
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.03;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+        }
+
+        let screenShake = 0;
+        function shakeScreen(amount = 15) { screenShake = amount; }
+
+        function update() {
+            if (gameMode !== 'playing') return;
+
+            // Update effects
+            let speedMod = 1;
+            if (activeEffects.slowTimeLeft > 0) {
+                activeEffects.slowTimeLeft--;
+                speedMod = 0.4; // 60% slower
+            }
+
+            // Player Movement
+            if (player.movingLeft) player.x -= player.speed;
+            if (player.movingRight) player.x += player.speed;
+
+            if (player.targetX !== null) {
+                const dx = player.targetX - player.x;
+                if (Math.abs(dx) > player.speed) {
+                    player.x += Math.sign(dx) * player.speed;
+                } else {
+                    player.x = player.targetX;
+                }
+            }
+
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > gameWidth) player.x = gameWidth - player.width;
+
+            // Entities Movement & Collision
+            let roundEnded = false;
+            let currentSpeed = baseBombSpeed * currentSpeedMutiplier * speedMod;
+
+            // Update Bombs
+            for (let i = 0; i < bombs.length; i++) {
+                let bomb = bombs[i];
+                if (!bomb.active) continue;
+
+                bomb.y += currentSpeed;
+                bomb.pulsePhase += 0.1;
+
+                // Collision Box
+                const hitY = bomb.y + bomb.radius * 0.8;
+                
+                if (hitY >= player.y && bomb.y < player.y + player.height &&
+                    bomb.x + bomb.radius >= player.x && bomb.x - bomb.radius <= player.x + player.width) {
+                    
+                    bomb.active = false;
+                    if (bomb.isCorrect) {
+                        score += 10;
+                        createExplosion(bomb.x, bomb.y, '#0ff', 30); // Cyan sparks
+                        roundEnded = true;
+                    } else {
+                        lives--;
+                        createExplosion(bomb.x, bomb.y, '#f00', 40); // Red explosion
+                        shakeScreen();
+                        roundEnded = true;
+                    }
+                } else if (bomb.y > gameHeight + bomb.radius) {
+                    bomb.active = false;
+                    if (bomb.isCorrect) {
+                        lives--;
+                        createExplosion(bomb.x, gameHeight - 10, '#f00', 30);
+                        shakeScreen();
+                        roundEnded = true;
+                    }
+                }
+            }
+
+            // Update Items
+            for (let i = items.length - 1; i >= 0; i--) {
+                let item = items[i];
+                if (!item.active) continue;
+                item.y += item.speed * speedMod;
+
+                if (item.y + item.radius >= player.y && item.y < player.y + player.height &&
+                    item.x + item.radius >= player.x && item.x - item.radius <= player.x + player.width) {
+                    // Collected item
+                    item.active = false;
+                    if (item.type === 'slow') {
+                        activeEffects.slowTimeLeft = 300; // ~5 seconds at 60fps
+                        createExplosion(item.x, item.y, '#0f0', 20); // Green
+                    } else if (item.type === 'heart') {
+                        lives++;
+                        createExplosion(item.x, item.y, '#f0f', 20); // Pink
+                    }
+                } else if (item.y > gameHeight + item.radius) {
+                    item.active = false;
+                }
+                
+                if(!item.active) items.splice(i, 1);
+            }
+
+            if (roundEnded) {
+                if (lives <= 0) endGame();
+                else spawnRound();
+            }
+
+            updateParticles();
+            backgroundOffset = (backgroundOffset + 1) % 50; // For grid animation
+        }
+
+        function drawGrid() {
+            ctx.strokeStyle = 'rgba(0, 255, 255, 0.1)';
+            ctx.lineWidth = 1;
+            
+            // Horizontal lines moving down
+            for(let i = -10; i < gameHeight; i+=50) {
+                ctx.beginPath();
+                ctx.moveTo(0, i + backgroundOffset);
+                ctx.lineTo(gameWidth, i + backgroundOffset);
+                ctx.stroke();
+            }
+            
+            // Perspective vertical lines
+            let center = gameWidth / 2;
+            for(let i = -gameWidth; i <= gameWidth*2; i+=100) {
+                ctx.beginPath();
+                ctx.moveTo(center, 0);
+                ctx.lineTo(i, gameHeight);
+                ctx.stroke();
+            }
+        }
+
+        function draw() {
+            ctx.save();
+            if (screenShake > 0) {
+                ctx.translate((Math.random()-0.5)*screenShake, (Math.random()-0.5)*screenShake);
+                screenShake -= 1;
+            }
+
+            ctx.clearRect(0, 0, gameWidth, gameHeight);
+            drawGrid();
+
+            // Draw Target Question Banner (Neon HUD style)
+            if (gameMode === 'playing' && currentTargetQuestion) {
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#0ff';
+                ctx.fillStyle = 'rgba(5, 5, 20, 0.8)';
+                ctx.strokeStyle = '#0ff';
+                ctx.lineWidth = 2;
+                
+                const boxW = Math.max(260, gameWidth * 0.6);
+                ctx.beginPath();
+                ctx.rect(gameWidth/2 - boxW/2, 20, boxW, 60);
+                ctx.fill();
+                ctx.stroke();
+                
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 32px Orbitron, Noto Sans TC';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(currentTargetQuestion, gameWidth/2, 50);
+
+                // Level Indicator
+                ctx.font = 'bold 16px Orbitron';
+                ctx.fillStyle = '#0ff';
+                ctx.fillText(`LV.${level}`, gameWidth/2, 95);
+            }
+
+            // Draw Player (Neon Hoverboard)
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#0ff';
+            ctx.fillStyle = 'rgba(0, 255, 255, 0.2)';
+            ctx.strokeStyle = '#0ff';
+            ctx.lineWidth = 3;
+            
+            ctx.beginPath();
+            ctx.moveTo(player.x + 10, player.y);
+            ctx.lineTo(player.x + player.width - 10, player.y);
+            ctx.lineTo(player.x + player.width, player.y + player.height);
+            ctx.lineTo(player.x, player.y + player.height);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            
+            // Engine glow
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.arc(player.x + 20, player.y + player.height, 5, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(player.x + player.width - 20, player.y + player.height, 5, 0, Math.PI*2); ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Draw Items
+            for (let item of items) {
+                ctx.save();
+                ctx.translate(item.x, item.y);
+                if (item.type === 'slow') {
+                    ctx.shadowBlur = 15; ctx.shadowColor = '#0f0';
+                    ctx.fillStyle = '#0f0';
+                    ctx.font = '24px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
+                    ctx.fillText('⏱️', 0, 0);
+                } else if (item.type === 'heart') {
+                    ctx.shadowBlur = 15; ctx.shadowColor = '#f0f';
+                    ctx.fillStyle = '#f0f';
+                    ctx.font = '24px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
+                    ctx.fillText('💖', 0, 0);
+                }
+                ctx.restore();
+            }
+
+            // Draw Bombs (Energy Cores)
+            for (let bomb of bombs) {
+                if (!bomb.active) continue;
+                
+                ctx.save();
+                ctx.translate(bomb.x, bomb.y);
+                
+                let pulse = Math.sin(bomb.pulsePhase) * 5;
+                
+                // Outer Glow
+                ctx.shadowBlur = 20 + pulse;
+                ctx.shadowColor = bomb.isCorrect ? '#0ff' : '#f0f'; // Don't reveal visually, just random color? 
+                // Wait, if color reveals answer it's too easy! Make all same color.
+                ctx.shadowColor = '#ff0'; 
+                
+                ctx.fillStyle = 'rgba(20, 20, 20, 0.9)';
+                ctx.strokeStyle = '#ff0';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(0, 0, bomb.radius, 0, Math.PI*2);
+                ctx.fill();
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+
+                // Inner core
+                ctx.fillStyle = `rgba(255, 255, 0, ${0.2 + pulse*0.02})`;
+                ctx.beginPath();
+                ctx.arc(0, 0, bomb.radius - 8, 0, Math.PI*2);
+                ctx.fill();
+
+                // Bomb Text
+                ctx.fillStyle = '#fff';
+                ctx.shadowBlur = 5;
+                ctx.shadowColor = '#000';
+                let fontSize = Math.min(18, bomb.radius * 2 / (bomb.text.length * 0.5));
+                ctx.font = `bold ${fontSize}px Noto Sans TC`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(bomb.text, 0, 0);
+                
+                ctx.restore();
+            }
+
+            // Draw Particles
+            for (let p of particles) {
+                ctx.globalAlpha = p.life;
+                ctx.fillStyle = p.color;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1.0;
+            ctx.shadowBlur = 0;
+
+            // Draw HUD (UI)
+            if (gameMode === 'playing') {
+                ctx.fillStyle = '#0ff';
+                ctx.font = 'bold 24px Orbitron';
+                ctx.textAlign = 'left';
+                ctx.fillText(`SCORE: ${score}`, 20, 40);
+                
+                ctx.textAlign = 'right';
+                ctx.fillStyle = '#f0f';
+                let heartStr = '❤️'.repeat(lives);
+                ctx.fillText(heartStr, gameWidth - 20, 40);
+
+                // Draw active effect indicator
+                if (activeEffects.slowTimeLeft > 0) {
+                    ctx.fillStyle = '#0f0';
+                    ctx.font = '16px Noto Sans TC';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(`⏱️ 系統緩速中...`, gameWidth/2, 120);
+                }
+            }
+
+            ctx.restore(); 
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            if (gameMode !== 'gameover') {
+                animationId = requestAnimationFrame(gameLoop);
+            }
+        }
+
+        function startGame() {
+            startScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            levelUpMsg.classList.remove('level-up-anim');
+            
+            resizeCanvas();
+            score = 0;
+            lives = 3;
+            level = 1;
+            gameMode = 'playing';
+            particles = [];
+            items = [];
+            activeEffects.slowTimeLeft = 0;
+            currentSpeedMutiplier = 1;
+            
+            spawnRound();
+            
+            if(animationId) cancelAnimationFrame(animationId);
+            gameLoop();
+        }
+
+        function endGame() {
+            gameMode = 'gameover';
+            gameOverScreen.classList.remove('hidden');
+            finalScoreSpan.innerText = score;
+            levelReachedSpan.innerText = `到達關卡: LEVEL ${level}`;
+        }
+
+        // Init draw
+        drawGrid();
+
+    </script>
+</body>
+</html>
